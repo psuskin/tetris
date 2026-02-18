@@ -10,6 +10,7 @@ Supports two product types:
 from dataclasses import dataclass
 from typing import List, Tuple
 from enum import Enum
+import math
 
 
 class ProductType(Enum):
@@ -84,7 +85,6 @@ class Product:
         """Calculate product volume in cubic cm."""
         l, w, h = self.dimensions
         if self.product_type == ProductType.CYLINDER:
-            import math
             radius = l / 2
             return math.pi * radius * radius * h
         return l * w * h

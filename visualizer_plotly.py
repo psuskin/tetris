@@ -7,8 +7,8 @@ This replaces matplotlib with Plotly for TRUE 3D rendering without bleeding arti
 import plotly.graph_objects as go
 from plotly.utils import PlotlyJSONEncoder
 import numpy as np
+import re
 from typing import List, Optional
-from plotly.subplots import make_subplots
 
 from product import Product, ProductType
 from container import RollContainer
@@ -33,7 +33,6 @@ class PackingVisualizerPlotly:
     
     def _darken_color(self, rgb_color: str) -> str:
         """Darken an RGB color for edges."""
-        import re
         match = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', rgb_color)
         if match:
             r, g, b = int(match.group(1)), int(match.group(2)), int(match.group(3))
@@ -52,14 +51,31 @@ class PackingVisualizerPlotly:
                 'lightgreen': 'rgb(144, 238, 144)',
                 'lightyellow': 'rgb(255, 255, 224)',
                 'lightgray': 'rgb(211, 211, 211)',
+                'lightcyan': 'rgb(224, 255, 255)',
                 'skyblue': 'rgb(135, 206, 235)',
+                'deepskyblue': 'rgb(0, 191, 255)',
+                'paleturquoise': 'rgb(175, 238, 238)',
                 'tan': 'rgb(210, 180, 140)',
+                'wheat': 'rgb(245, 222, 179)',
+                'burlywood': 'rgb(222, 184, 135)',
+                'beige': 'rgb(245, 245, 220)',
+                'ivory': 'rgb(255, 255, 240)',
+                'gold': 'rgb(255, 215, 0)',
                 'yellow': 'rgb(255, 255, 0)',
                 'blue': 'rgb(0, 0, 255)',
                 'red': 'rgb(255, 0, 0)',
-                'green': 'rgb(0, 255, 0)',
+                'green': 'rgb(0, 128, 0)',
+                'darkgreen': 'rgb(0, 100, 0)',
+                'limegreen': 'rgb(50, 205, 50)',
+                'olive': 'rgb(128, 128, 0)',
                 'orange': 'rgb(255, 165, 0)',
                 'purple': 'rgb(128, 0, 128)',
+                'brown': 'rgb(139, 69, 19)',
+                'chocolate': 'rgb(210, 105, 30)',
+                'maroon': 'rgb(128, 0, 0)',
+                'darkred': 'rgb(139, 0, 0)',
+                'lavender': 'rgb(230, 230, 250)',
+                'white': 'rgb(245, 245, 245)',
             }
             return color_map.get(product.color, product.color)
         
@@ -182,47 +198,6 @@ class PackingVisualizerPlotly:
             )
         )
     
-    def create_box_edges(self, position: tuple, dimensions: tuple, 
-                        color: str = 'black', width: float = 2) -> List[go.Scatter3d]:
-        """Create edge lines for a box - these render PROPERLY with depth in Plotly."""
-        x, y, z = position
-        l, w, h = dimensions
-        
-        # Define the 12 edges of the box
-        edges = [
-            # Bottom face
-            [(x, y, z), (x+l, y, z)],
-            [(x+l, y, z), (x+l, y+w, z)],
-            [(x+l, y+w, z), (x, y+w, z)],
-            [(x, y+w, z), (x, y, z)],
-            # Top face
-            [(x, y, z+h), (x+l, y, z+h)],
-            [(x+l, y, z+h), (x+l, y+w, z+h)],
-            [(x+l, y+w, z+h), (x, y+w, z+h)],
-            [(x, y+w, z+h), (x, y, z+h)],
-            # Vertical edges
-            [(x, y, z), (x, y, z+h)],
-            [(x+l, y, z), (x+l, y, z+h)],
-            [(x+l, y+w, z), (x+l, y+w, z+h)],
-            [(x, y+w, z), (x, y+w, z+h)],
-        ]
-        
-        edge_traces = []
-        for edge in edges:
-            x_coords = [edge[0][0], edge[1][0], None]
-            y_coords = [edge[0][1], edge[1][1], None]
-            z_coords = [edge[0][2], edge[1][2], None]
-            
-            edge_traces.append(go.Scatter3d(
-                x=x_coords, y=y_coords, z=z_coords,
-                mode='lines',
-                line=dict(color=color, width=width),
-                showlegend=False,
-                hoverinfo='skip'
-            ))
-        
-        return edge_traces
-    
     def create_fragile_grid(self, position: tuple, dimensions: tuple) -> List[go.Scatter3d]:
         """Create simple red X pattern on fragile items - performance optimized."""
         x, y, z = position
@@ -326,45 +301,43 @@ class PackingVisualizerPlotly:
             hoverinfo='skip'
         ))
         
-        # Draw shelf floors every 20cm (but NOT at z=0 to avoid cutting through floor products)
+        # Draw shelf floors every 20cm — only INSTALLED (used) shelves get a
+        # filled surface. Unused shelf positions only show a faint dashed outline
+        # so that stacked products don't appear to clip through a shelf.
         for z in range(20, int(container.height), 20):
-            # Semi-transparent shelf platform
-            shelf_vertices = np.array([
-                [0, 0, z],
-                [container.length, 0, z],
-                [container.length, container.width, z],
-                [0, container.width, z]
-            ])
-            
-            # Use brown for used shelves, light gray for unused
             if z in used_shelf_levels:
-                shelf_color = 'rgb(139, 90, 43)'  # Brown
-                shelf_opacity = 0.4
+                # Real installed shelf — brown filled surface
+                traces.append(go.Mesh3d(
+                    x=[0, container.length, container.length, 0],
+                    y=[0, 0, container.width, container.width],
+                    z=[z, z, z, z],
+                    i=[0, 0], j=[1, 2], k=[2, 3],
+                    color='rgb(139, 90, 43)',
+                    opacity=0.4,
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
+                # Solid edge for installed shelf
+                traces.append(go.Scatter3d(
+                    x=[0, container.length, container.length, 0, 0],
+                    y=[0, 0, container.width, container.width, 0],
+                    z=[z, z, z, z, z],
+                    mode='lines',
+                    line=dict(color='rgb(139, 90, 43)', width=2),
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
             else:
-                shelf_color = 'rgb(211, 211, 211)'  # Light gray
-                shelf_opacity = 0.25
-            
-            traces.append(go.Mesh3d(
-                x=[0, container.length, container.length, 0],
-                y=[0, 0, container.width, container.width],
-                z=[z, z, z, z],
-                i=[0, 0], j=[1, 2], k=[2, 3],
-                color=shelf_color,
-                opacity=shelf_opacity,
-                showlegend=False,
-                hoverinfo='skip'
-            ))
-            
-            # Simplified shelf edge (single line)
-            traces.append(go.Scatter3d(
-                x=[0, container.length, container.length, 0, 0],
-                y=[0, 0, container.width, container.width, 0],
-                z=[z, z, z, z, z],
-                mode='lines',
-                line=dict(color='darkgray', width=1, dash='dash'),
-                showlegend=False,
-                hoverinfo='skip'
-            ))
+                # Unused shelf position — faint dashed outline only, no surface
+                traces.append(go.Scatter3d(
+                    x=[0, container.length, container.length, 0, 0],
+                    y=[0, 0, container.width, container.width, 0],
+                    z=[z, z, z, z, z],
+                    mode='lines',
+                    line=dict(color='lightgray', width=1, dash='dash'),
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
             
             # Height label
             traces.append(go.Scatter3d(
@@ -722,8 +695,7 @@ class PackingVisualizerPlotly:
         fig = go.Figure()
         
         # Add container
-        container_traces = self.create_container_traces()
-        for trace in container_traces:
+        for trace in self.create_container_traces():
             fig.add_trace(trace)
         
         # Add all products
@@ -736,37 +708,35 @@ class PackingVisualizerPlotly:
             if placed.product.fragile:
                 product_name = f"🔴 {product_name}"
             
-            box_mesh = self.create_box_mesh(
-                placed.position,
-                placed.dimensions,
-                color,
-                opacity=0.7,
-                name=product_name
-            )
-            fig.add_trace(box_mesh)
+            edge_color = self._darken_color(color)
             
-            edges = self.create_box_edges(placed.position, placed.dimensions,
-                                        color='black', width=2)
-            for edge in edges:
-                fig.add_trace(edge)
+            if placed.product.product_type == ProductType.CYLINDER:
+                fig.add_trace(self.create_cylinder_mesh(
+                    placed.position, placed.dimensions, placed.orientation,
+                    color, opacity=0.7, name=product_name, edge_color=edge_color
+                ))
+            else:
+                fig.add_trace(self.create_box_mesh(
+                    placed.position, placed.dimensions, color,
+                    opacity=0.7, name=product_name, edge_color=edge_color
+                ))
             
             if placed.product.fragile:
-                grid = self.create_fragile_grid(placed.position, placed.dimensions)
-                for line in grid:
+                for line in self.create_fragile_grid(placed.position, placed.dimensions):
                     fig.add_trace(line)
         
         # Layout
         fig.update_layout(
-            title=f"Roll Container Packing - Final Configuration",
+            title="Roll Container Packing - Final Configuration",
             scene=dict(
                 xaxis=dict(title='Length (cm)', range=[0, self.config.container.length * 1.1]),
                 yaxis=dict(title='Width (cm)', range=[0, self.config.container.width * 1.1]),
                 zaxis=dict(title='Height (cm)', range=[0, self.config.container.height * 1.05]),
                 aspectmode='manual',
                 aspectratio=dict(
-                    x=self.config.container.length / 100.0,
-                    y=self.config.container.width / 100.0,
-                    z=self.config.container.height / 100.0
+                    x=self.config.container.length / self.config.container.height,
+                    y=self.config.container.width / self.config.container.height,
+                    z=1.0
                 ),
                 camera=dict(
                     eye=dict(x=1.5, y=1.5, z=1.2),
