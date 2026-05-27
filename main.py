@@ -8,7 +8,7 @@ an interactive 3D visualization in the browser.
 from container import RollContainer
 from sample_data import create_sample_products
 from packing_algorithm import MultiContainerPacker
-from visualizer_plotly import PackingVisualizerPlotly
+from visualizer import PackingVisualizer
 
 
 def make_container(index: int) -> RollContainer:
@@ -63,7 +63,7 @@ def main():
                   f"dims={l:.0f}×{w:.0f}×{h:.0f}  top={z+h:.0f}cm")
 
     input("\nPress Enter to open 3D visualization...")
-    PackingVisualizerPlotly(solution).show()
+    PackingVisualizer(solution).show()
 
 
 if __name__ == "__main__":

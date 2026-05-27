@@ -1,250 +1,178 @@
-"""Sample product dataset for the tetris packing demo."""
+"""
+Sample product dataset based on real customer order data.
+
+Each line item declares its package type via the ``unit`` field
+(Karton, Kiste, Fass, Tube, ...). The PACKAGING_RULES table below
+maps the German keyword to (orientation policy, shape).
+"""
+
+from typing import List, Tuple
 
 from product import create_quader, create_cylinder, Product
-from typing import List
 
+
+# ---------------------------------------------------------------------------
+# Packaging rules
+# ---------------------------------------------------------------------------
+
+PACKAGING_RULES: dict = {
+    # any side down, render as cuboid
+    "KARTON":    ("any", "cuboid"),
+    "BEUTEL":    ("any", "cuboid"),
+    "BLOCK":     ("any", "cuboid"),
+    "BROTFORM":  ("any", "cuboid"),
+    "PACK":      ("any", "cuboid"),
+    "ROLLE":     ("any", "cuboid"),
+    "PK":        ("any", "cuboid"),
+    "RL":        ("any", "cuboid"),
+
+    # bottom only, cuboid
+    "BOX":       ("bottom", "cuboid"),
+    "CONTAINER": ("bottom", "cuboid"),
+    "KANISTER":  ("bottom", "cuboid"),
+    "KISTE":     ("bottom", "cuboid"),
+    "TR":        ("bottom", "cuboid"),
+
+    # must lie on its side (no standing), cuboid
+    "SACK":      ("horizontal_only", "cuboid"),
+
+    # bottom only, cylinder
+    "EIMER":     ("bottom", "cylinder"),
+    "FA":        ("bottom", "cylinder"),
+    "FASS":      ("bottom", "cylinder"),
+
+    # bottom or lying on side, cylinder
+    "BUND":      ("bottom_or_side", "cylinder"),
+    "DOSE":      ("bottom_or_side", "cylinder"),
+    "FL":        ("bottom_or_side", "cylinder"),
+    "FLASCHE":   ("bottom_or_side", "cylinder"),
+    "GLASS":     ("bottom_or_side", "cylinder"),
+    "SCHLAUCH":  ("bottom_or_side", "cylinder"),
+    "SPIESS":    ("bottom_or_side", "cylinder"),
+    "TUBE":      ("bottom_or_side", "cylinder"),
+}
+
+# Source-data oddities: Greek-encoded "KI" → KISTE, German "FAß" → FASS.
+UNIT_ALIASES: dict = {
+    "KI":  "KISTE",
+    "ΚΙ": "KISTE",   # Greek capital Kappa+Iota
+    "FAß": "FASS",
+}
+
+
+# ---------------------------------------------------------------------------
+# Real customer order (transcribed from production JSON)
+# ---------------------------------------------------------------------------
+
+RAW_ORDER: List[dict] = [
+    {"desc": "DPG Red Bull 24 x 0,25 l DS",          "code": "9505", "qty": 1,  "unit": "Karton 24 Stk", "dims": "33, 22.5, 14",     "weight": 7.0,  "color": "lightblue"},
+    {"desc": "DPG Uludag 24 x 0,33 Dose",            "code": "8900", "qty": 2,  "unit": "Karton 24 Stk", "dims": "35.5, 23, 15",     "weight": 9.0,  "color": "deepskyblue"},
+    {"desc": "DPG Mezzo Mix 24 x 0,33 l DS",         "code": "9504", "qty": 2,  "unit": "Karton 24 Stk", "dims": "36, 24, 15",       "weight": 9.0,  "color": "orange"},
+    {"desc": "DPG Fanta Lemon 24 x 0,33 l DS",       "code": "9538", "qty": 1,  "unit": "Karton 24 Stk", "dims": "36, 24, 15",       "weight": 9.0,  "color": "yellow"},
+    {"desc": "Mezzo Mix 24 x 0,2 l Kiste",           "code": "9585", "qty": 2,  "unit": "ΚΙ 24","dims": "44, 30.5, 27.5",  "weight": 10.0, "color": "chocolate"},
+    {"desc": "Vio Medium Apollinaris 18 x 0,51 DPG", "code": "9559", "qty": 1,  "unit": "Karton 18",     "dims": "39, 20, 22.5",     "weight": 12.0, "color": "skyblue"},
+    {"desc": "Vio Spritzig 18 x 0,5 l DPG",          "code": "9569", "qty": 2,  "unit": "Karton 18",     "dims": "39, 20, 22.5",     "weight": 12.0, "color": "paleturquoise"},
+    {"desc": "FUZE Pfirsich Hibiskus 12 x 0,41 PET", "code": "8923", "qty": 3,  "unit": "TR 12",         "dims": "25, 19, 20",       "weight": 6.0,  "color": "lightcoral"},
+    {"desc": "DPG Fanta Cassis 24 x 0,33 DS",        "code": "9508", "qty": 4,  "unit": "Karton 24 Stk", "dims": "36, 24, 15",       "weight": 9.0,  "color": "purple"},
+    {"desc": "Krombacher 30 l Fass",                 "code": "9616", "qty": 1,  "unit": "Fass",          "dims": "37, 40",           "weight": 35.0, "color": "gold"},
+    {"desc": "Tomaten Ketchup 800 ml Tube",          "code": "9081", "qty": 2,  "unit": "Tube 1",        "dims": "6.5, 29",          "weight": 1.0,  "color": "red"},
+    {"desc": "Romi Xtra Frittieroel 15 l KN",        "code": "9700", "qty": 2,  "unit": "Kanister 15 k", "dims": "24.5, 23.5, 32.5", "weight": 14.0, "color": "olive"},
+    {"desc": "Farina Pizzamehl Tipo 00 25 kg",       "code": "9941", "qty": 2,  "unit": "Sack 25 kg",    "dims": "56, 32, 14",       "weight": 25.0, "color": "wheat"},
+    {"desc": "FABBRI Gourmet-Sauce Haselnuss 950 g", "code": "9544", "qty": 2,  "unit": "Flasche 1",     "dims": "7.5, 25",          "weight": 1.0,  "color": "chocolate"},
+    {"desc": "Mondamin Sossenbinder dunkel 1 KG",    "code": "9324", "qty": 1,  "unit": "Pack 1",        "dims": "13, 11.5, 20.5",   "weight": 1.0,  "color": "brown"},
+    {"desc": "Kraftbouillon Gemuese 1 KG",           "code": "9306", "qty": 1,  "unit": "Pack 1",        "dims": "13, 11.5, 15",     "weight": 1.0,  "color": "limegreen"},
+    {"desc": "Schnellkochnudeln 500 g Long-Life",    "code": "9868", "qty": 10, "unit": "Pack 1",        "dims": "10, 10, 20",       "weight": 0.5,  "color": "beige"},
+    {"desc": "Develey Suess Sauer Sauce 875 ml",     "code": "9822", "qty": 2,  "unit": "Tube 1",        "dims": "9.5, 6, 26.5",     "weight": 1.0,  "color": "darkred"},
+    {"desc": "Zwiebeln granuliert Hausmarke",        "code": "9311", "qty": 1,  "unit": "Pack 1",        "dims": "30, 19, 5",        "weight": 1.0,  "color": "tan"},
+    {"desc": "Ravens. H-Milchreis Natur 1 l",        "code": "9314", "qty": 4,  "unit": "Pack 1",        "dims": "9.5, 6.5, 17",     "weight": 1.0,  "color": "ivory"},
+]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_CUBOID_ORIENTATIONS = {
+    "any":              ["B", "L", "R", "V", "H", "O"],
+    "bottom":           ["B"],
+    # Sacks must lie flat. Assuming the data follows natural (l, b, h) ordering
+    # where h is the smallest dimension, B and O are the lying-flat orientations.
+    "horizontal_only":  ["B", "O"],
+    "bottom_or_side":   ["B", "L", "R", "V", "H"],
+}
+
+_CYLINDER_ORIENTATIONS = {
+    "any":              ["B", "M"],
+    "bottom":           ["B"],
+    "horizontal_only":  ["M"],
+    "bottom_or_side":   ["B", "M"],
+}
+
+
+def _orientations(rule: str, shape: str) -> List[str]:
+    table = _CYLINDER_ORIENTATIONS if shape == "cylinder" else _CUBOID_ORIENTATIONS
+    if rule not in table:
+        raise ValueError(f"Unknown orientation rule {rule!r} for shape {shape!r}")
+    return list(table[rule])
+
+
+def _unit_key(unit: str) -> str:
+    """Canonical packaging keyword from a unit string (first token, normalised)."""
+    if not unit:
+        return "KARTON"
+    first = unit.strip().split()[0].upper()
+    return UNIT_ALIASES.get(first, first)
+
+
+def _parse_dims(text: str) -> Tuple[float, ...]:
+    return tuple(float(p.strip()) for p in text.split(","))
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def create_sample_products() -> List[Product]:
-    """
-    Create a sample product dataset for testing.
-    
-    Includes mix of:
-    - Heavy base items (stackable)
-    - Fragile items (flat, bottom-only orientation)
-    - Medium items (flexible orientations)
-    - Small items (gap fillers)
-    """
-    
-    products = [
-        # Beverage crates (Quader - boxes)
-        create_quader(
-            id="BEV001",
-            name="Water Crate 6x1.5L",
-            length=40, width=30, height=25,
-            allowed_orientations=['B', 'O'],  # Only bottom or top down
-            weight=10.5,
-            color='lightblue'
-        ),
-        
-        create_quader(
-            id="BEV002",
-            name="Juice Box 12x1L",
-            length=35, width=25, height=30,
-            allowed_orientations=['B', 'O'],
-            weight=13.2,
-            color='orange'
-        ),
-        
-        create_quader(
-            id="BEV003",
-            name="Soda Crate 24x0.5L",
-            length=38, width=28, height=22,
-            allowed_orientations=['B', 'O'],
-            weight=13.0,
-            color='deepskyblue'
-        ),
-        
-        # Bread crates (FRAGILE - nothing should be stacked on top)
-        create_quader(
-            id="BREAD001",
-            name="Bread Crate Large",
-            length=60, width=40, height=15,
-            allowed_orientations=['B'],  # Only bottom down (fragile)
-            weight=5.0,
-            color='wheat',
-            fragile=True
-        ),
-        
-        create_quader(
-            id="BREAD002",
-            name="Bread Crate Small",
-            length=40, width=30, height=15,
-            allowed_orientations=['B'],
-            weight=3.5,
-            color='tan',
-            fragile=True
-        ),
-        
-        create_quader(
-            id="BREAD003",
-            name="Baguette Tray",
-            length=65, width=35, height=12,
-            allowed_orientations=['B'],
-            weight=4.0,
-            color='burlywood',
-            fragile=True
-        ),
-        
-        # Vegetable crates (FRAGILE - tomatoes are delicate)
-        create_quader(
-            id="VEG001",
-            name="Tomato Crate",
-            length=50, width=30, height=20,
-            allowed_orientations=['B'],  # Only bottom (fragile)
-            weight=8.0,
-            color='red',
-            fragile=True
-        ),
-        
-        create_quader(
-            id="VEG002",
-            name="Potato Bag Box",
-            length=40, width=30, height=30,
-            allowed_orientations=['B', 'L', 'R', 'V', 'H'],  # Multiple orientations OK
-            weight=12.0,
-            color='brown'
-        ),
-        
-        create_quader(
-            id="VEG003",
-            name="Lettuce Crate",
-            length=45, width=35, height=18,
-            allowed_orientations=['B'],
-            weight=6.5,
-            color='limegreen',
-            fragile=True
-        ),
-        
-        # Dairy products
-        create_quader(
-            id="DAIRY001",
-            name="Milk Crate 4x2L",
-            length=30, width=25, height=28,
-            allowed_orientations=['B', 'O'],
-            weight=9.0,
-            color='white'
-        ),
-        
-        create_quader(
-            id="DAIRY002",
-            name="Yogurt Box 24x150g",
-            length=35, width=28, height=20,
-            allowed_orientations=['B'],
-            weight=4.5,
-            color='lavender',
-            fragile=True  # Yogurt cups are fragile
-        ),
-        
-        # Cylindrical products - Liquids
-        create_cylinder(
-            id="CYL001",
-            name="Oil Drum 5L",
-            diameter=20, height=35,
-            allowed_orientations=['B', 'O'],  # Standing only
-            weight=4.5,
-            color='yellow'
-        ),
-        
-        create_cylinder(
-            id="CYL002",
-            name="Sauce Container 10L",
-            diameter=25, height=40,
-            allowed_orientations=['B', 'O', 'M'],  # Can lie on side
-            weight=11.0,
-            color='darkred'
-        ),
-        
-        create_cylinder(
-            id="CYL003",
-            name="Vinegar Barrel 8L",
-            diameter=22, height=38,
-            allowed_orientations=['B', 'O'],
-            weight=8.5,
-            color='olive'
-        ),
-        
-        create_cylinder(
-            id="CYL004",
-            name="Syrup Keg 15L",
-            diameter=28, height=45,
-            allowed_orientations=['B', 'O', 'M'],
-            weight=16.0,
-            color='chocolate'
-        ),
-        
-        create_cylinder(
-            id="CYL005",
-            name="Wine Cask 5L",
-            diameter=18, height=30,
-            allowed_orientations=['B', 'O'],
-            weight=5.5,
-            color='maroon'
-        ),
-        
-        # Small items
-        create_quader(
-            id="SMALL001",
-            name="Spice Box",
-            length=20, width=15, height=10,
-            allowed_orientations=['B', 'L', 'R', 'V', 'H', 'O'],  # Any orientation
-            weight=2.0,
-            color='green'
-        ),
-        
-        create_quader(
-            id="SMALL002",
-            name="Herb Pack",
-            length=25, width=20, height=8,
-            allowed_orientations=['B'],  # Only bottom
-            weight=1.5,
-            color='lightgreen'
-        ),
-        
-        create_quader(
-            id="SMALL003",
-            name="Condiment Box",
-            length=22, width=18, height=12,
-            allowed_orientations=['B', 'O'],
-            weight=2.5,
-            color='darkgreen'
-        ),
-        
-        # Large boxes
-        create_quader(
-            id="LARGE001",
-            name="Cereal Master Case",
-            length=50, width=35, height=40,
-            allowed_orientations=['B', 'L', 'R'],
-            weight=8.5,
-            color='gold'
-        ),
-        
-        create_quader(
-            id="LARGE002",
-            name="Pasta Case",
-            length=45, width=30, height=25,
-            allowed_orientations=['B', 'L', 'R', 'V', 'H'],
-            weight=6.0,
-            color='beige'
-        ),
-        
-        create_quader(
-            id="LARGE003",
-            name="Rice Bag Box",
-            length=48, width=32, height=28,
-            allowed_orientations=['B', 'L', 'R'],
-            weight=10.0,
-            color='ivory'
-        ),
-        
-        # Frozen goods
-        create_quader(
-            id="FROZEN001",
-            name="Ice Cream Box",
-            length=42, width=32, height=24,
-            allowed_orientations=['B'],
-            weight=7.5,
-            color='lightcyan'
-        ),
-        
-        create_quader(
-            id="FROZEN002",
-            name="Frozen Veg Case",
-            length=38, width=28, height=20,
-            allowed_orientations=['B', 'O'],
-            weight=9.5,
-            color='paleturquoise'
-        ),
-    ]
-    
+    """Expand RAW_ORDER into individual Product instances (one per unit)."""
+    products: List[Product] = []
+
+    for entry in RAW_ORDER:
+        key = _unit_key(entry["unit"])
+        rule, shape = PACKAGING_RULES.get(key, ("any", "cuboid"))
+
+        dims = _parse_dims(entry["dims"])
+        # When the dimension count contradicts the rule, the data wins:
+        #   3 dims → cuboid (Develey 'Tube' is actually rectangular);
+        #   2 dims → cylinder (diameter, height).
+        if len(dims) == 3 and shape == "cylinder":
+            shape = "cuboid"
+        if len(dims) == 2 and shape == "cuboid":
+            shape = "cylinder"
+        if len(dims) not in (2, 3):
+            raise ValueError(f"Bad dimension string {entry['dims']!r}")
+
+        orientations = _orientations(rule, shape)
+        qty = entry["qty"]
+
+        for n in range(qty):
+            pid  = entry["code"] if qty == 1 else f"{entry['code']}-{n+1}"
+            name = entry["desc"] if qty == 1 else f"{entry['desc']} ({n+1}/{qty})"
+
+            if shape == "cylinder":
+                d, h = dims
+                products.append(create_cylinder(
+                    id=pid, name=name,
+                    diameter=d, height=h,
+                    allowed_orientations=orientations,
+                    weight=entry["weight"], color=entry["color"],
+                ))
+            else:
+                l, b, h = dims
+                products.append(create_quader(
+                    id=pid, name=name,
+                    length=l, width=b, height=h,
+                    allowed_orientations=orientations,
+                    weight=entry["weight"], color=entry["color"],
+                ))
+
     return products
