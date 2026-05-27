@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Roll Container Packing</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    color: #1a1a1a;
+    background: linear-gradient(180deg, #f5f7fa 0%, #e9eef5 100%);
+  }
+  #app { display: grid;
+    grid-template-columns: 1fr 360px;
+    grid-template-rows: 1fr 92px;
+    height: 100%;
+  }
+  #canvas-wrap { grid-column: 1; grid-row: 1; position: relative; overflow: hidden; }
+  canvas { display: block; }
+
+  #info { grid-column: 2; grid-row: 1 / 3;
+    background: white; border-left: 1px solid #d4d8e0;
+    padding: 24px; overflow-y: auto;
+    box-shadow: -2px 0 12px rgba(15, 23, 42, 0.04);
+  }
+  #controls { grid-column: 1; grid-row: 2;
+    background: white; border-top: 1px solid #d4d8e0;
+    display: flex; align-items: center; justify-content: center;
+    gap: 18px; padding: 0 24px;
+  }
+
+  button { padding: 9px 14px; font-size: 14px; font-weight: 500;
+    border: 1px solid #d4d8e0; border-radius: 8px;
+    background: white; cursor: pointer; transition: all 0.15s;
+    color: #1a1a1a; min-width: 38px;
+  }
+  button:hover:not(:disabled) { background: #f5f7fa; border-color: #94a3b8; }
+  button:active:not(:disabled)  { transform: scale(0.97); }
+  button:disabled { opacity: 0.32; cursor: not-allowed; }
+
+  .nav-group { display: flex; align-items: center; gap: 8px; }
+  .nav-group .label { font-size: 10px; color: #6b7280;
+    text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;
+  }
+
+  #status { font-size: 13px; color: #1a1a1a; font-weight: 500;
+    min-width: 260px; text-align: center;
+  }
+  #status b { font-size: 15px; }
+
+  .header { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+  .header h2 { margin: 0 0 6px 0; font-size: 18px; font-weight: 600; line-height: 1.3; }
+  .header .subtitle { font-size: 12px; color: #6b7280; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+  .product-img { width: 100%; aspect-ratio: 1;
+    background: #f5f7fa; border-radius: 12px; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #e5e7eb;
+  }
+  .product-img img { width: 100%; height: 100%; object-fit: contain; padding: 8px; }
+  .product-img .no-image { color: #9ca3af; font-size: 12px; }
+
+  .product-meta { margin-top: 16px;
+    display: grid; grid-template-columns: 100px 1fr; gap: 8px 12px; font-size: 13px;
+  }
+  .product-meta .k { color: #6b7280; }
+  .product-meta .v { font-weight: 500; word-break: break-word; }
+
+  .stats { margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;
+    font-size: 12px; color: #6b7280;
+  }
+  .stats div { margin: 4px 0; }
+  .stats b { color: #1a1a1a; }
+
+  .fragile-badge { display: inline-block; background: #fef2f2; color: #dc2626;
+    padding: 2px 8px; border-radius: 4px; font-size: 10px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+  }
+
+  .hint { font-size: 11px; color: #94a3b8; margin-left: 12px; }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <div id="canvas-wrap"></div>
+  <aside id="info">
+    <div class="header">
+      <h2 id="hdr-name">—</h2>
+      <div id="hdr-subtitle" class="subtitle">—</div>
+    </div>
+    <div class="product-img" id="prod-img"><div class="no-image">No image</div></div>
+    <div class="product-meta" id="prod-meta"></div>
+    <div class="stats" id="stats"></div>
+  </aside>
+  <div id="controls">
+    <div class="nav-group">
+      <span class="label">Container</span>
+      <button id="prev-c" title="Previous container (Shift+←)">◀</button>
+      <button id="next-c" title="Next container (Shift+→)">▶</button>
+    </div>
+    <div id="status">—</div>
+    <div class="nav-group">
+      <span class="label">Step</span>
+      <button id="prev-s" title="Previous step (←)">◀</button>
+      <button id="next-s" title="Next step (→)">▶</button>
+    </div>
+    <span class="hint">← → step &middot; Shift+← → container</span>
+  </div>
+</div>
+
+<script id="payload" type="application/json">{"containers": [{"container": {"length": 100.0, "width": 80.0, "height": 170.0, "shelf_interval": 20.0, "name": "Roll Container #1"}, "shelves": [], "utilization": 33.13889367364744, "weight": 293.0, "max_weight": 300, "products": [{"name": "Krombacher 30 l Fass", "code": "9616", "shape": "cylinder", "orientation": "B", "position": [0.0, 0.0, 0.0], "dimensions": [37.0, 37.0, 40.0], "weight": 35.0, "fragile": false, "color": "gold"}, {"name": "FUZE Pfirsich Hibiskus 12 x 0,41 PET (1/3)", "code": "8923", "shape": "cuboid", "orientation": "B", "position": [37.0, 0.0, 0.0], "dimensions": [19.0, 25.0, 20.0], "weight": 6.0, "fragile": false, "color": "lightcoral"}, {"name": "Mezzo Mix 24 x 0,2 l Kiste (1/2)", "code": "9585", "shape": "cuboid", "orientation": "B", "position": [56.0, 0.0, 0.0], "dimensions": [44.0, 30.5, 27.5], "weight": 10.0, "fragile": false, "color": "chocolate"}, {"name": "Ravens. H-Milchreis Natur 1 l (2/4)", "code": "9314", "shape": "cuboid", "orientation": "B", "position": [37.0, 25.0, 0.0], "dimensions": [6.5, 9.5, 17.0], "weight": 1.0, "fragile": false, "color": "ivory"}, {"name": "Farina Pizzamehl Tipo 00 25 kg (1/2)", "code": "9941", "shape": "cuboid", "orientation": "B", "position": [44.0, 30.5, 0.0], "dimensions": [56.0, 32.0, 14.0], "weight": 25.0, "fragile": false, "color": "wheat"}, {"name": "Mezzo Mix 24 x 0,2 l Kiste (2/2)", "code": "9585", "shape": "cuboid", "orientation": "B", "position": [0.0, 37.0, 0.0], "dimensions": [44.0, 30.5, 27.5], "weight": 10.0, "fragile": false, "color": "chocolate"}, {"name": "DPG Mezzo Mix 24 x 0,33 l DS (1/2)", "code": "9504", "shape": "cuboid", "orientation": "V", "position": [44.0, 62.5, 0.0], "dimensions": [36.0, 15.0, 24.0], "weight": 9.0, "fragile": false, "color": "orange"}, {"name": "Ravens. H-Milchreis Natur 1 l (1/4)", "code": "9314", "shape": "cuboid", "orientation": "L", "position": [80.0, 63.0, 0.0], "dimensions": [6.5, 17.0, 9.5], "weight": 1.0, "fragile": false, "color": "ivory"}, {"name": "Kraftbouillon Gemuese 1 KG", "code": "9306", "shape": "cuboid", "orientation": "V", "position": [87.0, 65.0, 0.0], "dimensions": [13.0, 15.0, 11.5], "weight": 1.0, "fragile": false, "color": "limegreen"}, {"name": "Mondamin Sossenbinder dunkel 1 KG", "code": "9324", "shape": "cuboid", "orientation": "L", "position": [0.0, 68.5, 0.0], "dimensions": [20.5, 11.5, 13.0], "weight": 1.0, "fragile": false, "color": "brown"}, {"name": "Schnellkochnudeln 500 g Long-Life (1/10)", "code": "9868", "shape": "cuboid", "orientation": "L", "position": [20.5, 70.0, 0.0], "dimensions": [20.0, 10.0, 10.0], "weight": 0.5, "fragile": false, "color": "beige"}, {"name": "Schnellkochnudeln 500 g Long-Life (2/10)", "code": "9868", "shape": "cuboid", "orientation": "L", "position": [20.5, 70.0, 10.0], "dimensions": [20.0, 10.0, 10.0], "weight": 0.5, "fragile": false, "color": "beige"}, {"name": "Ravens. H-Milchreis Natur 1 l (3/4)", "code": "9314", "shape": "cuboid", "orientation": "V", "position": [83.0, 62.5, 11.5], "dimensions": [17.0, 9.5, 6.5], "weight": 1.0, "fragile": false, "color": "ivory"}, {"name": "Ravens. H-Milchreis Natur 1 l (4/4)", "code": "9314", "shape": "cuboid", "orientation": "V", "position": [0.0, 70.5, 13.0], "dimensions": [17.0, 9.5, 6.5], "weight": 1.0, "fragile": false, "color": "ivory"}, {"name": "Farina Pizzamehl Tipo 00 25 kg (2/2)", "code": "9941", "shape": "cuboid", "orientation": "B", "position": [44.0, 30.5, 14.0], "dimensions": [56.0, 32.0, 14.0], "weight": 25.0, "fragile": false, "color": "wheat"}, {"name": "Zwiebeln granuliert Hausmarke", "code": "9311", "shape": "cuboid", "orientation": "B", "position": [37.0, 0.0, 20.0], "dimensions": [19.0, 30.0, 5.0], "weight": 1.0, "fragile": false, "color": "tan"}, {"name": "Develey Suess Sauer Sauce 875 ml (1/2)", "code": "9822", "shape": "cuboid", "orientation": "V", "position": [10.0, 70.0, 20.0], "dimensions": [26.5, 9.5, 6.0], "weight": 1.0, "fragile": false, "color": "darkred"}, {"name": "Schnellkochnudeln 500 g Long-Life (3/10)", "code": "9868", "shape": "cuboid", "orientation": "L", "position": [39.5, 70.0, 24.0], "dimensions": [20.0, 10.0, 10.0], "weight": 0.5, "fragile": false, "color": "beige"}, {"name": "Schnellkochnudeln 500 g Long-Life (4/10)", "code": "9868", "shape": "cuboid", "orientation": "L", "position": [59.5, 70.0, 24.0], "dimensions": [20.0, 10.0, 10.0], "weight": 0.5, "fragile": false, "color": "beige"}, {"name": "DPG Fanta Lemon 24 x 0,33 l DS", "code": "9538", "shape": "cuboid", "orientation": "V", "position": [39.5, 0.0, 27.5], "dimensions": [36.0, 15.0, 24.0], "weight": 9.0, "fragile": false, "color": "yellow"}, {"name": "Romi Xtra Frittieroel 15 l KN (1/2)", "code": "9700", "shape": "cuboid", "orientation": "B", "position": [75.5, 0.0, 27.5], "dimensions": [24.5, 23.5, 32.5], "weight": 14.0, "fragile": false, "color": "olive"}, {"name": "Romi Xtra Frittieroel 15 l KN (2/2)", "code": "9700", "shape": "cuboid", "orientation": "B", "position": [0.0, 37.0, 27.5], "dimensions": [24.5, 23.5, 32.5], "weight": 14.0, "fragile": false, "color": "olive"}, {"name": "DPG Mezzo Mix 24 x 0,33 l DS (2/2)", "code": "9504", "shape": "cuboid", "orientation": "V", "position": [24.5, 44.0, 27.5], "dimensions": [15.0, 36.0, 24.0], "weight": 9.0, "fragile": false, "color": "orange"}, {"name": "Schnellkochnudeln 500 g Long-Life (5/10)", "code": "9868", "shape": "cuboid", "orientation": "L", "position": [0.0, 60.5, 27.5], "dimensions": [20.0, 10.0, 10.0], "weight": 0.5, "fragile": false, "color": "beige"}, {"name": "Vio Spritzig 18 x 0,5 l DPG (2/2)", "code": "9569", "shape": "cuboid", "orientation": "B", "position": [40.0, 20.0, 28.0], "dimensions": [20.0, 39.0, 22.5], "weight": 12.0, "fragile": false, "color": "paleturquoise"}, {"name": "Vio Medium Apollinaris 18 x 0,51 DPG", "code": "9559", "shape": "cuboid", "orientation": "V", "position": [61.0, 23.5, 28.0], "dimensions": [39.0, 22.5, 20.0], "weight": 12.0, "fragile": false, "color": "skyblue"}, {"name": "Vio Spritzig 18 x 0,5 l DPG (1/2)", "code": "9569", "shape": "cuboid", "orientation": "V", "position": [61.0, 46.0, 28.0], "dimensions": [39.0, 22.5, 20.0], "weight": 12.0, "fragile": false, "color": "paleturquoise"}, {"name": "Develey Suess Sauer Sauce 875 ml (2/2)", "code": "9822", "shape": "cuboid", "orientation": "V", "position": [39.5, 70.5, 34.0], "dimensions": [26.5, 9.5, 6.0], "weight": 1.0, "fragile": false, "color": "darkred"}, {"name": "DPG Fanta Cassis 24 x 0,33 DS (1/4)", "code": "9508", "shape": "cuboid", "orientation": "B", "position": [0.0, 0.0, 40.0], "dimensions": [36.0, 24.0, 15.0], "weight": 9.0, "fragile": false, "color": "purple"}, {"name": "Schnellkochnudeln 500 g Long-Life (6/10)", "code": "9868", "shape": "cuboid", "orientation": "L", "position": [0.0, 24.0, 40.0], "dimensions": [20.0, 10.0, 10.0], "weight": 0.5, "fragile": false, "color": "beige"}, {"name": "Schnellkochnudeln 500 g Long-Life (7/10)", "code": "9868", "shape": "cuboid", "orientation": "L", "position": [20.0, 24.0, 40.0], "dimensions": [20.0, 10.0, 10.0], "weight": 0.5, "fragile": false, "color": "beige"}, {"name": "FABBRI Gourmet-Sauce Haselnuss 950 g (1/2)", "code": "9544", "shape": "cylinder", "orientation": "M", "position": [39.5, 72.5, 40.0], "dimensions": [25.0, 7.5, 7.5], "weight": 1.0, "fragile": false, "color": "chocolate"}, {"name": "DPG Fanta Cassis 24 x 0,33 DS (2/4)", "code": "9508", "shape": "cuboid", "orientation": "B", "position": [64.0, 23.5, 48.0], "dimensions": [36.0, 24.0, 15.0], "weight": 9.0, "fragile": false, "color": "purple"}, {"name": "FABBRI Gourmet-Sauce Haselnuss 950 g (2/2)", "code": "9544", "shape": "cylinder", "orientation": "M", "position": [75.0, 47.5, 48.0], "dimensions": [25.0, 7.5, 7.5], "weight": 1.0, "fragile": false, "color": "chocolate"}, {"name": "DPG Fanta Cassis 24 x 0,33 DS (3/4)", "code": "9508", "shape": "cuboid", "orientation": "B", "position": [64.0, 56.0, 48.0], "dimensions": [36.0, 24.0, 15.0], "weight": 9.0, "fragile": false, "color": "purple"}, {"name": "Schnellkochnudeln 500 g Long-Life (8/10)", "code": "9868", "shape": "cuboid", "orientation": "L", "position": [0.0, 24.0, 50.0], "dimensions": [20.0, 10.0, 10.0], "weight": 0.5, "fragile": false, "color": "beige"}, {"name": "DPG Fanta Cassis 24 x 0,33 DS (4/4)", "code": "9508", "shape": "cuboid", "orientation": "B", "position": [39.5, 15.0, 50.5], "dimensions": [24.0, 36.0, 15.0], "weight": 9.0, "fragile": false, "color": "purple"}, {"name": "Schnellkochnudeln 500 g Long-Life (9/10)", "code": "9868", "shape": "cuboid", "orientation": "L", "position": [39.5, 51.0, 50.5], "dimensions": [20.0, 10.0, 10.0], "weight": 0.5, "fragile": false, "color": "beige"}, {"name": "DPG Uludag 24 x 0,33 Dose (2/2)", "code": "8900", "shape": "cuboid", "orientation": "V", "position": [36.0, 0.0, 51.5], "dimensions": [35.5, 15.0, 23.0], "weight": 9.0, "fragile": false, "color": "deepskyblue"}, {"name": "Tomaten Ketchup 800 ml Tube (1/2)", "code": "9081", "shape": "cylinder", "orientation": "M", "position": [24.5, 51.0, 51.5], "dimensions": [6.5, 29.0, 6.5], "weight": 1.0, "fragile": false, "color": "red"}, {"name": "Tomaten Ketchup 800 ml Tube (2/2)", "code": "9081", "shape": "cylinder", "orientation": "M", "position": [31.0, 51.0, 51.5], "dimensions": [6.5, 29.0, 6.5], "weight": 1.0, "fragile": false, "color": "red"}, {"name": "DPG Uludag 24 x 0,33 Dose (1/2)", "code": "8900", "shape": "cuboid", "orientation": "B", "position": [0.0, 0.0, 55.0], "dimensions": [35.5, 23.0, 15.0], "weight": 9.0, "fragile": false, "color": "deepskyblue"}, {"name": "FUZE Pfirsich Hibiskus 12 x 0,41 PET (2/3)", "code": "8923", "shape": "cuboid", "orientation": "B", "position": [75.0, 0.0, 60.0], "dimensions": [25.0, 19.0, 20.0], "weight": 6.0, "fragile": false, "color": "lightcoral"}, {"name": "DPG Red Bull 24 x 0,25 l DS", "code": "9505", "shape": "cuboid", "orientation": "B", "position": [0.0, 23.0, 60.0], "dimensions": [22.5, 33.0, 14.0], "weight": 7.0, "fragile": false, "color": "lightblue"}, {"name": "Schnellkochnudeln 500 g Long-Life (10/10)", "code": "9868", "shape": "cuboid", "orientation": "L", "position": [39.5, 51.0, 60.5], "dimensions": [20.0, 10.0, 10.0], "weight": 0.5, "fragile": false, "color": "beige"}, {"name": "FUZE Pfirsich Hibiskus 12 x 0,41 PET (3/3)", "code": "8923", "shape": "cuboid", "orientation": "B", "position": [75.0, 19.0, 63.0], "dimensions": [25.0, 19.0, 20.0], "weight": 6.0, "fragile": false, "color": "lightcoral"}]}], "start_c": 0, "start_s": 0, "image_base": "/img"}</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const DATA = JSON.parse(document.getElementById('payload').textContent);
+const useDataUrls = DATA.images != null;
+const IMG_BASE   = DATA.image_base || '';
+
+function imageFor(code) {
+  if (useDataUrls) return DATA.images[code] || null;
+  return IMG_BASE ? `${IMG_BASE}/${code}` : null;
+}
+
+// --- Renderer / scene / camera ---
+const wrap = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+wrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, wrap.clientWidth / wrap.clientHeight, 1, 5000);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const key = new THREE.DirectionalLight(0xffffff, 0.9);
+key.position.set(140, 280, 220);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xfff5e6, 0.25);
+fill.position.set(-120, 100, -100);
+scene.add(fill);
+
+// Ground plane outside the container (subtle shadow catcher feel)
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(2000, 2000),
+  new THREE.MeshStandardMaterial({ color: 0xeef2f8, roughness: 1 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.5;
+scene.add(ground);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 50;
+controls.maxDistance = 1500;
+
+// --- Texture cache ---
+const textureLoader = new THREE.TextureLoader();
+const textureCache = new Map();
+function getTexture(code) {
+  if (textureCache.has(code)) return textureCache.get(code);
+  const src = imageFor(code);
+  if (!src) { textureCache.set(code, null); return null; }
+  const tex = textureLoader.load(src);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  textureCache.set(code, tex);
+  return tex;
+}
+
+function hexToColor(hex, fallback = 0xcbd5e1) {
+  if (!hex) return new THREE.Color(fallback);
+  try { return new THREE.Color(hex); } catch (e) { return new THREE.Color(fallback); }
+}
+
+function boxMesh(prod) {
+  const [l, w, h] = prod.dimensions;
+  const geom = new THREE.BoxGeometry(l, h, w);  // Three Y = our Z
+  const tex = getTexture(prod.code);
+  const color = hexToColor(prod.color);
+  const mat = tex
+    ? new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, metalness: 0.04 })
+    : new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const [x, y, z] = prod.position;
+  mesh.position.set(x + l/2, z + h/2, y + w/2);
+
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geom),
+    new THREE.LineBasicMaterial({ color: 0x0f172a, transparent: true, opacity: 0.28 })
+  );
+  mesh.add(edges);
+  mesh.userData.outline = edges;
+  return mesh;
+}
+
+function cylinderMesh(prod) {
+  const [d1, d2, d3] = prod.dimensions;
+  const tex = getTexture(prod.code);
+  const color = hexToColor(prod.color);
+  const sideMat = tex
+    ? new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6, metalness: 0.08 })
+    : new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
+  const capMat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+
+  const [x, y, z] = prod.position;
+  let radius, height, mesh;
+
+  if (prod.orientation === 'M') {
+    radius = d3 / 2;  // z-extent is always the diameter
+    if (Math.abs(d1 - d3) < 0.1) {
+      // axis along our Y (Three Z)
+      height = d2;
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 36), [sideMat, capMat, capMat]);
+      mesh.rotation.x = Math.PI / 2;
+      mesh.position.set(x + radius, z + radius, y + height/2);
+    } else {
+      // axis along our X (Three X)
+      height = d1;
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 36), [sideMat, capMat, capMat]);
+      mesh.rotation.z = Math.PI / 2;
+      mesh.position.set(x + height/2, z + radius, y + radius);
+    }
+  } else {
+    // Standing cylinder
+    radius = d1 / 2;
+    height = d3;
+    mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 36), [sideMat, capMat, capMat]);
+    mesh.position.set(x + radius, z + height/2, y + radius);
+  }
+  return mesh;
+}
+
+const containerGroups = [];
+const stepMeshes = [];
+
+function buildContainer(cfg) {
+  const g = new THREE.Group();
+  const c = cfg.container;
+
+  // Translucent walls
+  const wallGeom = new THREE.BoxGeometry(c.length, c.height, c.width);
+  const walls = new THREE.Mesh(
+    wallGeom,
+    new THREE.MeshBasicMaterial({ color: 0xc4cdde, transparent: true, opacity: 0.04, side: THREE.DoubleSide, depthWrite: false })
+  );
+  walls.position.set(c.length/2, c.height/2, c.width/2);
+  g.add(walls);
+
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(wallGeom),
+    new THREE.LineBasicMaterial({ color: 0x6b7280, transparent: true, opacity: 0.55 })
+  );
+  edges.position.set(c.length/2, c.height/2, c.width/2);
+  g.add(edges);
+
+  // Floor
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(c.length, c.width),
+    new THREE.MeshStandardMaterial({ color: 0xdde3ec, roughness: 0.95 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(c.length/2, 0.02, c.width/2);
+  g.add(floor);
+
+  // Installed shelves
+  cfg.shelves.forEach(z => {
+    const shelf = new THREE.Mesh(
+      new THREE.PlaneGeometry(c.length, c.width),
+      new THREE.MeshStandardMaterial({ color: 0x8b5a2b, transparent: true, opacity: 0.45, side: THREE.DoubleSide, roughness: 0.9 })
+    );
+    shelf.rotation.x = -Math.PI / 2;
+    shelf.position.set(c.length/2, z, c.width/2);
+    g.add(shelf);
+  });
+
+  // Products (hidden until current step reaches them)
+  const meshes = cfg.products.map(prod => {
+    const m = prod.shape === 'cylinder' ? cylinderMesh(prod) : boxMesh(prod);
+    m.userData.code = prod.code;
+    m.visible = false;
+    g.add(m);
+    return m;
+  });
+
+  g.visible = false;
+  scene.add(g);
+  containerGroups.push(g);
+  stepMeshes.push(meshes);
+}
+
+DATA.containers.forEach(buildContainer);
+
+// --- Camera framing ---
+function frame(ci) {
+  const c = DATA.containers[ci].container;
+  const cx = c.length / 2, cy = c.height / 2, cz = c.width / 2;
+  const r = Math.max(c.length, c.width, c.height);
+  camera.position.set(cx + r * 0.95, cy + r * 0.85, cz + r * 1.35);
+  controls.target.set(cx, cy, cz);
+  controls.update();
+}
+
+// --- Step state ---
+let currentC = DATA.start_c || 0;
+let currentS = DATA.start_s || 0;
+
+function setEmissive(mesh, hex) {
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  mats.forEach(m => { if (m && m.emissive) m.emissive.setHex(hex); });
+}
+
+function applyStep() {
+  containerGroups.forEach((g, ci) => g.visible = (ci === currentC));
+  const meshes = stepMeshes[currentC];
+  meshes.forEach((m, i) => {
+    m.visible = i <= currentS;
+    setEmissive(m, i === currentS ? 0x1f1f1f : 0x000000);
+    if (m.userData.outline) {
+      m.userData.outline.material.opacity = i === currentS ? 0.55 : 0.28;
+    }
+  });
+  updatePanel();
+  updateControlsUI();
+}
+
+function updatePanel() {
+  const cfg = DATA.containers[currentC];
+  const prod = cfg.products[currentS];
+
+  document.getElementById('hdr-name').textContent = prod.name;
+  const tags = [`Step ${currentS+1} / ${cfg.products.length}`, prod.code];
+  if (prod.fragile) tags.push('<span class="fragile-badge">Fragile</span>');
+  document.getElementById('hdr-subtitle').innerHTML = tags.join(' &middot; ');
+
+  const img = document.getElementById('prod-img');
+  const src = imageFor(prod.code);
+  img.innerHTML = src
+    ? `<img src="${src}" alt="${prod.name}"/>`
+    : `<div class="no-image">No image for ${prod.code}</div>`;
+
+  const [x, y, z] = prod.position;
+  const [l, w, h] = prod.dimensions;
+  document.getElementById('prod-meta').innerHTML = `
+    <div class="k">Position</div><div class="v">x=${x.toFixed(0)}, y=${y.toFixed(0)}, z=${z.toFixed(0)} cm</div>
+    <div class="k">Dimensions</div><div class="v">${l.toFixed(0)} × ${w.toFixed(0)} × ${h.toFixed(0)} cm</div>
+    <div class="k">Top</div><div class="v">${(z + h).toFixed(0)} cm</div>
+    <div class="k">Shape</div><div class="v">${prod.shape}</div>
+    <div class="k">Orientation</div><div class="v">${prod.orientation}</div>
+    <div class="k">Weight</div><div class="v">${prod.weight.toFixed(1)} kg</div>
+  `;
+
+  document.getElementById('stats').innerHTML = `
+    <div><b>Container ${currentC+1} of ${DATA.containers.length}</b></div>
+    <div>Items placed: ${cfg.products.length}</div>
+    <div>Utilization: ${cfg.utilization.toFixed(1)}%</div>
+    <div>Weight: ${cfg.weight.toFixed(1)} / ${cfg.max_weight.toFixed(0)} kg</div>
+  `;
+}
+
+function updateControlsUI() {
+  const nC = DATA.containers.length;
+  const nS = DATA.containers[currentC].products.length;
+  document.getElementById('status').innerHTML =
+    `<b>Container ${currentC+1}/${nC}</b> &middot; Step ${currentS+1}/${nS}`;
+  document.getElementById('prev-c').disabled = currentC === 0;
+  document.getElementById('next-c').disabled = currentC === nC - 1;
+  document.getElementById('prev-s').disabled = currentS === 0;
+  document.getElementById('next-s').disabled = currentS === nS - 1;
+}
+
+function setContainer(nc) {
+  const nC = DATA.containers.length;
+  nc = Math.max(0, Math.min(nC - 1, nc));
+  if (nc === currentC) return;
+  currentC = nc; currentS = 0;
+  frame(currentC); applyStep();
+}
+function setStep(ns) {
+  const nS = DATA.containers[currentC].products.length;
+  ns = Math.max(0, Math.min(nS - 1, ns));
+  if (ns === currentS) return;
+  currentS = ns;
+  applyStep();
+}
+
+document.getElementById('prev-c').onclick = () => setContainer(currentC - 1);
+document.getElementById('next-c').onclick = () => setContainer(currentC + 1);
+document.getElementById('prev-s').onclick = () => setStep(currentS - 1);
+document.getElementById('next-s').onclick = () => setStep(currentS + 1);
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowLeft')  { e.shiftKey ? setContainer(currentC - 1) : setStep(currentS - 1); }
+  if (e.key === 'ArrowRight') { e.shiftKey ? setContainer(currentC + 1) : setStep(currentS + 1); }
+});
+
+function onResize() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', onResize);
+
+frame(currentC);
+applyStep();
+
+(function loop() {
+  requestAnimationFrame(loop);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+</script>
+</body>
+</html>

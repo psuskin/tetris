@@ -1,9 +1,16 @@
 {
   "version": 2,
   "builds": [
-    { "src": "app.py", "use": "@vercel/python" }
+    { "src": "app.py", "use": "@vercel/python" },
+    { "src": "public/**", "use": "@vercel/static" }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "app.py" }
+    { "src": "/api/(.*)",          "dest": "/app.py" },
+    { "src": "/img/([^.]+)",       "dest": "/public/img/$1.jpg",
+      "headers": { "Cache-Control": "public, max-age=31536000, immutable" } },
+    { "src": "/img/(.+)",          "dest": "/public/img/$1",
+      "headers": { "Cache-Control": "public, max-age=31536000, immutable" } },
+    { "src": "/(.+\\..+)",         "dest": "/public/$1" },
+    { "src": "/(.*)",              "dest": "/public/index.html" }
   ]
 }
