@@ -2,26 +2,35 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1a1a">
 <title>Roll Container Packing</title>
 <style>
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden;
+  html, body { margin: 0; overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
     color: #1a1a1a;
     background: linear-gradient(180deg, #f5f7fa 0%, #e9eef5 100%);
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: contain;
+    height: 100vh;
+    height: 100dvh;
   }
+
+  /* ---------- Desktop layout (≥ 769 px) ---------- */
   #app { display: grid;
     grid-template-columns: 1fr 360px;
     grid-template-rows: 1fr 92px;
     height: 100%;
   }
   #canvas-wrap { grid-column: 1; grid-row: 1; position: relative; overflow: hidden; }
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; }
 
   #info { grid-column: 2; grid-row: 1 / 3;
     background: white; border-left: 1px solid #d4d8e0;
     padding: 24px; overflow-y: auto;
     box-shadow: -2px 0 12px rgba(15, 23, 42, 0.04);
+    -webkit-overflow-scrolling: touch;
   }
   #controls { grid-column: 1; grid-row: 2;
     background: white; border-top: 1px solid #d4d8e0;
@@ -29,13 +38,14 @@
     gap: 18px; padding: 0 24px;
   }
 
-  button { padding: 9px 14px; font-size: 14px; font-weight: 500;
+  button { padding: 10px 14px; font-size: 14px; font-weight: 500;
     border: 1px solid #d4d8e0; border-radius: 8px;
     background: white; cursor: pointer; transition: all 0.15s;
-    color: #1a1a1a; min-width: 38px;
+    color: #1a1a1a; min-width: 44px; min-height: 44px;
+    touch-action: manipulation;
   }
   button:hover:not(:disabled) { background: #f5f7fa; border-color: #94a3b8; }
-  button:active:not(:disabled)  { transform: scale(0.97); }
+  button:active:not(:disabled)  { transform: scale(0.96); background: #eef2f7; }
   button:disabled { opacity: 0.32; cursor: not-allowed; }
 
   .nav-group { display: flex; align-items: center; gap: 8px; }
@@ -78,6 +88,52 @@
   }
 
   .hint { font-size: 11px; color: #94a3b8; margin-left: 12px; }
+
+  /* ---------- Tablet / narrow (≤ 900 px) ---------- */
+  @media (max-width: 900px) {
+    #app { grid-template-columns: 1fr 300px; }
+    #info { padding: 18px; }
+  }
+
+  /* ---------- Phone (≤ 720 px) — stack vertically ---------- */
+  @media (max-width: 720px) {
+    #app {
+      grid-template-columns: 1fr;
+      grid-template-rows: minmax(0, 1fr) auto auto;
+    }
+    #canvas-wrap { grid-column: 1; grid-row: 1; }
+    #controls    { grid-column: 1; grid-row: 2;
+      padding: 10px 12px; gap: 10px; flex-wrap: wrap;
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+    }
+    #info        { grid-column: 1; grid-row: 3;
+      max-height: 42vh;
+      border-left: none; border-top: 1px solid #d4d8e0;
+      padding: 16px;
+      box-shadow: 0 -2px 8px rgba(15,23,42,0.04);
+    }
+    .hint   { display: none; }
+    #status { min-width: 0; flex: 1 1 auto; font-size: 12px; }
+    button  { padding: 8px 10px; font-size: 13px; }
+    .nav-group .label { display: none; }
+    .product-img { max-width: 220px; margin: 0 auto; }
+    .header h2   { font-size: 16px; }
+    .product-meta { grid-template-columns: 92px 1fr; font-size: 12px; }
+  }
+
+  /* ---------- Small phone (≤ 420 px) ---------- */
+  @media (max-width: 420px) {
+    #info { max-height: 40vh; padding: 14px; }
+    .product-img { max-width: 180px; }
+    #controls { gap: 6px; }
+    button  { padding: 8px; min-width: 40px; }
+  }
+
+  /* ---------- Landscape phones — give canvas more room ---------- */
+  @media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) {
+    #app { grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: 1fr; }
+    #info { display: none; }
+  }
 </style>
 
 <script type="importmap">
@@ -135,7 +191,7 @@ function imageFor(code) {
 // --- Renderer / scene / camera ---
 const wrap = document.getElementById('canvas-wrap');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(wrap.clientWidth, wrap.clientHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 wrap.appendChild(renderer.domElement);
